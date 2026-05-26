@@ -1,82 +1,126 @@
-# disambiguation.py
-# Only disambiguates ambiguous "Turing" - leaves "Alan Turing" and others unchanged
-
 def disambiguate_entities(entities, text, nlp):
-    """
-    Disambiguate only ambiguous 'Turing' references.
-    'Alan Turing' and other entities pass through unchanged.
-    """
     doc = nlp(text)
     disambiguated = []
-    
+
+    WINDOW_SIZE = 6  # slightly larger context
+
+    # -------------------------
+    # Scenario-based vocab
+    # -------------------------
+    PERSON_VERBS = {"bear", "born", "work", "study", "die", "publish", "prosecute"}
+    PERSON_NOUNS = {"university", "war", "code", "laboratory"}
+
+    MACHINE_VERBS = {"compute", "simulate", "process", "decide"}
+    MACHINE_NOUNS = {"machine", "algorithm", "input", "output", "computable"}
+
+    TEST_VERBS = {"test", "measure", "evaluate", "distinguish", "demonstrate"}
+    TEST_NOUNS = {"intelligence", "behavior", "human", "judge"}
+
+    AWARD_VERBS = {"award", "win", "receive"}
+    AWARD_NOUNS = {"prize", "acm", "award"}
+
     for ent in entities:
         ent_text = ent["text"]
         ent_lower = ent_text.lower()
-        
-        # Get context for this entity
-        context = ""
-        for sent in doc.sents:
-            if ent_text in sent.text:
-                context = sent.text
-                break
-        
-        context_lower = context.lower()
-        
-        # ONLY disambiguate if it's exactly "Turing" (not "Alan Turing")
-        if ent_lower == "turing" and "alan" not in ent_lower:
-            # Check context to determine what "Turing" refers to
-            if any(keyword in context_lower for keyword in ["machine", "computational", "automaton"]):
-                resolved = "Turing Machine"
-                ent_type = "Concept"
-                description = "Abstract computational model"
-            elif any(keyword in context_lower for keyword in ["award", "prize", "acm"]):
-                resolved = "Turing Award"
-                ent_type = "Award"
-                description = "ACM A.M. Turing Award"
-            elif any(keyword in context_lower for keyword in ["test", "intelligence", "ai", "artificial intelligence"]):
-                resolved = "Turing Test"
-                ent_type = "Concept"
-                description = "Test of machine intelligence"
-            else:
-                # Default to Alan Turing (the person)
-                resolved = "Alan Turing"
-                ent_type = "Person"
-                description = "British computer scientist and mathematician"
-            
-            disambiguated.append({
-                "original_text": ent_text,
-                "label": ent["label"],
-                "resolved_to": resolved,
-                "type": ent_type,
-                "description": description,
-                "disambiguation_method": "context_inference",
-                "disambiguated": True
-            })
-        else:
-            # Fix entity types for known concepts
-            ent_type = ent["label"]
-            description = None
-            
-            # Override type for known concepts
-            if ent_text == "Computability Theory":
-                ent_type = "Concept"
-                description = "Branch of theoretical computer science"
-            elif ent_text == "Turing Machine":
-                ent_type = "Concept"
-                description = "Abstract computational model"
-            elif ent_text == "Turing Test":
-                ent_type = "Concept"
-                description = "Test of machine intelligence"
-            
-            # All other entities: no disambiguation needed
+
+        # only disambiguate standalone "Turing"
+        if ent_lower != "turing":
             disambiguated.append({
                 "original_text": ent_text,
                 "label": ent["label"],
                 "resolved_to": ent_text,
-                "type": ent_type,
-                "description": description,
+                "type": ent["label"],
+                "description": None,
                 "disambiguation_method": "none",
                 "disambiguated": False
             })
-    
+            continue
+
+        # -------------------------
+        # Shortcut for explicit phrases
+        # -------------------------
+        text_lower = text.lower()
+        if "turing machine" in text_lower:
+            best_label = "Turing Machine"
+        elif "turing test" in text_lower:
+            best_label = "Turing Test"
+        elif "turing award" in text_lower:
+            best_label = "Turing Award"
+        else:
+            matched_tokens = [t for t in doc if t.text == ent_text]
+
+            best_label = None
+            best_score = -1
+
+            for token in matched_tokens:
+
+                start = max(0, token.i - WINDOW_SIZE)
+                end = min(len(doc), token.i + WINDOW_SIZE + 1)
+
+                window = doc[start:end]
+                words = {t.lemma_.lower() for t in window}
+
+                # -------------------------
+                # SCORING (weighted)
+                # -------------------------
+                scores = {
+                    "Alan Turing": 0,
+                    "Turing Machine": 0,
+                    "Turing Test": 0,
+                    "Turing Award": 0
+                }
+
+                # PERSON
+                scores["Alan Turing"] += len(words & PERSON_VERBS) * 2
+                scores["Alan Turing"] += len(words & PERSON_NOUNS)
+
+                # MACHINE
+                scores["Turing Machine"] += len(words & MACHINE_VERBS) * 2
+                scores["Turing Machine"] += len(words & MACHINE_NOUNS)
+
+                # TEST
+                scores["Turing Test"] += len(words & TEST_VERBS) * 2
+                scores["Turing Test"] += len(words & TEST_NOUNS)
+
+                # AWARD
+                scores["Turing Award"] += len(words & AWARD_VERBS) * 2
+                scores["Turing Award"] += len(words & AWARD_NOUNS)
+
+                label = max(scores, key=scores.get)
+                score = scores[label]
+
+                if score > best_score:
+                    best_score = score
+                    best_label = label
+
+            # fallback
+            if best_score == 0:
+                best_label = "Alan Turing"
+
+        # -------------------------
+        # Type mapping
+        # -------------------------
+        if best_label == "Alan Turing":
+            ent_type = "Person"
+            desc = "British computer scientist"
+        elif best_label == "Turing Machine":
+            ent_type = "Concept"
+            desc = "Abstract computational model"
+        elif best_label == "Turing Test":
+            ent_type = "Concept"
+            desc = "Test of machine intelligence"
+        else:
+            ent_type = "Award"
+            desc = "ACM A.M. Turing Award"
+
+        disambiguated.append({
+            "original_text": ent_text,
+            "label": ent["label"],
+            "resolved_to": best_label,
+            "type": ent_type,
+            "description": desc,
+            "disambiguation_method": "context_classification",
+            "disambiguated": True
+        })
+
     return disambiguated

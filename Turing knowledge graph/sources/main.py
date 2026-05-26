@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from disambiguation import disambiguate_entities
 from relationship_extraction import extract_relationships
-from kg_visualization import save_json, save_triplets_txt, visualize_ascii, visualize_html, visualize_dot, print_summary
+from kg_visualization import save_json, visualize_html, visualize_dot
 
 # Load the model
 nlp = en_core_web_sm.load()
@@ -29,8 +29,6 @@ def build_knowledge_graph(text):
     entities = extract_entities(text)
     disambiguated_entities = disambiguate_entities(entities, text, nlp)
     triplets = extract_relationships(text, disambiguated_entities, nlp)
-    
-    # Deduplicate entities by resolved_to name
     unique_entities = {}
     for ent in disambiguated_entities:
         key = ent["resolved_to"]
@@ -39,7 +37,7 @@ def build_knowledge_graph(text):
     
     kg = {
         "source_text": text.strip(),
-        "entities": list(unique_entities.values()),
+        "entities": list(unique_entities.values()),  # ALL entities
         "triplets": triplets,
         "statistics": {
             "total_entities": len(unique_entities),
@@ -62,10 +60,11 @@ if __name__ == "__main__":
     kg = build_knowledge_graph(text)
     
     # Save outputs
+
     save_json(kg)
     
     # Visualizations
     visualize_html(kg)
     visualize_dot(kg)
     
-    print("DONE.")
+    print("\nDONE.")

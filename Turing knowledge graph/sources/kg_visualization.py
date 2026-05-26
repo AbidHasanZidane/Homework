@@ -6,40 +6,6 @@ def save_json(kg, filename="knowledge_graph.json"):
         json.dump(kg, f, indent=2, ensure_ascii=False)
     print(f" {filename}: JSON knowledge graph")
 
-def save_triplets_txt(kg, filename="triplets.txt"):
-    """Save triplets as simple text file."""
-    with open(filename, 'w', encoding='utf-8') as f:
-        
-        for triplet in kg["triplets"]:
-            f.write(f"({triplet['subject']}, {triplet['predicate']}, {triplet['object']})\n")
-        
-        f.write(f"\n\n--- STATISTICS ---\n")
-        f.write(f"Total Entities: {kg['statistics']['total_entities']}\n")
-        f.write(f"Total Triplets: {kg['statistics']['total_triplets']}\n")
-    
-    print(f"{filename}: Triple list")
-
-def visualize_ascii(kg):
-    """Display ASCII visualization of the knowledge graph."""
-    # Group by subject
-    by_subject = {}
-    for triplet in kg["triplets"]:
-        subj = triplet["subject"]
-        if subj not in by_subject:
-            by_subject[subj] = []
-        by_subject[subj].append((triplet["predicate"], triplet["object"]))
-    
-    print("\n" + "="*50)
-    print("ASCII KNOWLEDGE GRAPH VISUALIZATION")
-    print("="*50)
-    
-    for subject, relations in by_subject.items():
-        print(f"\n {subject}")
-        for i, (pred, obj) in enumerate(relations):
-            prefix = "└─" if i == len(relations) - 1 else "├─"
-            # Truncate long objects
-            obj_display = obj[:50] + "..." if len(obj) > 50 else obj
-            print(f"   {prefix} {pred} → {obj_display}")
 
 def visualize_html(kg, filename="knowledge_graph.html"):
     """Create interactive HTML visualization using D3.js."""
@@ -329,22 +295,3 @@ def visualize_dot(kg, filename="knowledge_graph.dot"):
     with open(filename, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
     print(f" {filename}: Graphviz DOT file")
-
-def print_summary(kg):
-    
-    print("\nENTITIES:")
-    for ent in kg["entities"]:
-        if ent.get("disambiguated"):
-            print(f"  • {ent['resolved_to']} ({ent.get('type', ent['label'])}) ← from '{ent['original_text']}'")
-        else:
-            print(f"  • {ent['resolved_to']} ({ent.get('type', ent['label'])})")
-    
-    print("\nRELATIONSHIPS (Triplets):")
-    for triplet in kg["triplets"]:
-        print(f"  • ({triplet['subject']}, {triplet['predicate']}, {triplet['object']})")
-    
-    print(f"\nSTATISTICS:")
-    print(f"  • Total entities: {kg['statistics']['total_entities']}")
-    print(f"  • Total relationships: {kg['statistics']['total_triplets']}")
-    print(f"  • Entity types: {kg['statistics']['entity_types']}")
-    print("="*50 + "\n")
